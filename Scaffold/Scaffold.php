@@ -3,10 +3,6 @@
 namespace SwiftPHP\Scaffold;
 
 use Symfony\Component\Console\Application;
-use Symfony\Component\Console\Input\ArgvInput;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Output\ConsoleOutput;
-use Symfony\Component\Console\Output\OutputInterface;
 use SwiftPHP\Scaffold\Commands\MakeController;
 use SwiftPHP\Scaffold\Commands\MakeModel;
 use SwiftPHP\Scaffold\Commands\MakeMiddleware;
@@ -23,8 +19,8 @@ class Scaffold
 
     private function __construct()
     {
-        $this->basePath = dirname(__DIR__, 2);
-        $this->app = new Application('SwiftPHP', '1.0.0');
+        $this->basePath = getcwd();
+        $this->app = new Application('SwiftPHP', '1.0.2');
         $this->registerCommands();
     }
 
@@ -47,7 +43,7 @@ class Scaffold
         $this->app->add(new ListCommands());
     }
 
-    public function run(array $args = []): int
+    public function run(array $args = []): void
     {
         if (empty($args)) {
             $args = $_SERVER['argv'] ?? ['swiftphp'];
@@ -57,14 +53,13 @@ class Scaffold
             $args[] = 'list';
         }
 
-        $input = new ArgvInput($args);
-        $output = new ConsoleOutput();
-
         try {
-            return $this->app->run($input, $output);
+            $input = new \Symfony\Component\Console\Input\ArgvInput($args);
+            $output = new \Symfony\Component\Console\Output\ConsoleOutput();
+            $this->app->run($input, $output);
         } catch (\Exception $e) {
-            $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
-            return 1;
+            echo "Error: " . $e->getMessage() . "\n";
+            exit(1);
         }
     }
 
