@@ -147,8 +147,8 @@ PHP;
 
         $startPhp = <<<'PHP'
 <?php
-
-if (!is_file(__DIR__ . '/vendor/autoload.php')) {
+define('SWIFTPHP_ROOT', __DIR__);
+if (!is_file(SWIFTPHP_ROOT . '/vendor/autoload.php')) {
     echo "========================================\n";
     echo "  SwiftPHP Framework\n";
     echo "========================================\n";
@@ -159,7 +159,7 @@ if (!is_file(__DIR__ . '/vendor/autoload.php')) {
     exit(1);
 }
 
-require_once __DIR__ . '/vendor/autoload.php';
+require_once SWIFTPHP_ROOT . '/vendor/autoload.php';
 
 if (!class_exists('SwiftPHP\Server\SwiftServer')) {
     echo "Error: SwiftPHP Core not found. Please run 'composer install' first.\n";
@@ -169,7 +169,7 @@ if (!class_exists('SwiftPHP\Server\SwiftServer')) {
 use SwiftPHP\Server\SwiftServer;
 
 $server = new SwiftServer();
-$server->run();
+$server->start();
 PHP;
 
         file_put_contents($projectPath . '/start.php', $startPhp);
@@ -194,6 +194,23 @@ BAT;
 HTACCESS;
 
         file_put_contents($projectPath . '/public/.htaccess', $htaccess);
+
+        $swiftphpFile = <<<'PHP'
+#!/usr/bin/env php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use SwiftPHP\Scaffold\Scaffold;
+
+$loader = require __DIR__ . '/vendor/autoload.php';
+$loader->addPsr4('SwiftPHP\\Scaffold\\', __DIR__ . '/Scaffold/');
+
+Scaffold::getInstance()->run($_SERVER['argv']);
+PHP;
+
+        file_put_contents($projectPath . '/swiftphp', $swiftphpFile);
+        chmod($projectPath . '/swiftphp', 0755);
     }
 
     protected function createConfigFiles(string $projectPath, string $projectName): void
@@ -745,7 +762,8 @@ ENV;
     "scripts": {
         "start": "php start.php",
         "server": "php start.php"
-    }
+    },
+    "bin": ["swiftphp"]
 }
 JSON;
 
