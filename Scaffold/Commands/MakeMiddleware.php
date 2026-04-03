@@ -2,6 +2,7 @@
 
 namespace SwiftPHP\Scaffold\Commands;
 
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -17,15 +18,13 @@ class MakeMiddleware extends BaseCommand
         $this
             ->setName($this->commandName)
             ->setDescription('Create a new middleware class')
-            ->addArgument('name', InputArgument::REQUIRED, 'The middleware name (e.g., Auth)')
-            ->addOption('global', 'g', InputOption::VALUE_NONE, 'Register as global middleware');
+            ->addArgument('name', InputArgument::REQUIRED, 'The middleware name (e.g., Auth)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $name = $input->getArgument('name');
-        $isGlobal = $input->getOption('global');
 
         if ($this->validateName($name, $io)) {
             return Command::FAILURE;
@@ -42,39 +41,34 @@ class MakeMiddleware extends BaseCommand
             return Command::FAILURE;
         }
 
-        $content = <<<PHP
+        $content = $this->generateContent($className);
+
+        file_put_contents($filePath, $content);
+        $io->success("Middleware {$className} created successfully!");
+
+        return Command::SUCCESS;
+    }
+
+    protected function generateContent(string $className): string
+    {
+        return <<<PHP
 <?php
 
-namespace App\\Middleware;
+namespace App\Middleware;
 
-use SwiftPHP\\Core\\Middleware\\Middleware;
-use SwiftPHP\\Core\\Request\\Request;
-use SwiftPHP\\Core\\Response\\Response;
+use SwiftPHP\Middleware\Middleware;
+use SwiftPHP\Request\Request;
+use SwiftPHP\Response\Response;
 
 class {$className} extends Middleware
 {
     public function handle(Request \$request, callable \$next): Response
     {
         // Add your middleware logic here
-        
+
         return \$next(\$request);
     }
 }
 PHP;
-
-        if (file_put_contents($filePath, $content) === false) {
-            $io->error("Failed to create middleware file");
-            return Command::FAILURE;
-        }
-
-        $io->success("Middleware {$className} created successfully!");
-        $io->text("Path: {$filePath}");
-
-        if ($isGlobal) {
-            $io->note("To enable as global middleware, add to config/middleware.php:");
-            $io->text("  '{$className}' => \\App\\Middleware\\{$className}::class,");
-        }
-
-        return Command::SUCCESS;
     }
 }

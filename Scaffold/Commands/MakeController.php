@@ -2,6 +2,7 @@
 
 namespace SwiftPHP\Scaffold\Commands;
 
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -48,234 +49,161 @@ class MakeController extends BaseCommand
         $extends = $isApi ? 'Controller' : 'Controller';
         $content = $this->generateContent($namespace, $className, $extends, $isRest, $isApi);
 
-        if (file_put_contents($filePath, $content) === false) {
-            $io->error("Failed to create controller file");
-            return Command::FAILURE;
-        }
-
+        file_put_contents($filePath, $content);
         $io->success("Controller {$className}Controller created successfully!");
-        $io->text("Path: {$filePath}");
 
         return Command::SUCCESS;
     }
 
     protected function generateContent(string $namespace, string $className, string $extends, bool $isRest, bool $isApi): string
     {
-        $useStatements = "use SwiftPHP\\Core\\Controller\\Controller;\nuse SwiftPHP\\Core\\Request\\Request;\nuse SwiftPHP\\Core\\Response\\Response;";
-        $extendsClass = "extends {$extends}";
-
-        if ($isRest) {
-            $methods = $this->generateRestMethods();
-        } elseif ($isApi) {
-            $methods = $this->generateApiMethods();
-        } else {
-            $methods = $this->generateBasicMethods();
-        }
+        $methods = $this->generateMethods($className, $isRest, $isApi);
 
         return <<<PHP
 <?php
 
 namespace {$namespace};
 
-{$useStatements}
+use SwiftPHP\Controller\Controller;
+use SwiftPHP\Request\Request;
+use SwiftPHP\Response\Response;
 
-class {$className}Controller {$extendsClass}
+class {$className}Controller extends {$extends}
 {
 {$methods}
 }
 PHP;
     }
 
-    protected function generateBasicMethods(): string
+    protected function generateMethods(string $className, bool $isRest, bool $isApi): string
     {
-        return <<<'PHP'
-    public function index(?Request $request = null): Response
+        if ($isRest) {
+            return <<<PHP
+
+    public function index(?Request \$request = null): Response
     {
-        return $this->json([
+        return \$this->json([
             'code' => 200,
             'msg' => 'success',
             'data' => []
         ]);
     }
 
-    public function show(?Request $request = null): Response
+    public function show(?Request \$request = null): Response
     {
-        $id = $request->param('id', 0);
-        return $this->json([
+        \$id = \$request->param('id', 0);
+        return \$this->json([
             'code' => 200,
             'msg' => 'success',
-            'data' => ['id' => $id]
+            'data' => ['id' => \$id]
         ]);
     }
 
-    public function create(?Request $request = null): Response
+    public function store(?Request \$request = null): Response
     {
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success'
-        ]);
-    }
-
-    public function save(?Request $request = null): Response
-    {
-        $data = $request->post();
-        return $this->json([
-            'code' => 200,
-            'msg' => 'created successfully',
-            'data' => $data
-        ]);
-    }
-
-    public function edit(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success',
-            'data' => ['id' => $id]
-        ]);
-    }
-
-    public function update(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        $data = $request->post();
-        return $this->json([
-            'code' => 200,
-            'msg' => 'updated successfully',
-            'data' => ['id' => $id, 'data' => $data]
-        ]);
-    }
-
-    public function delete(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'deleted successfully'
-        ]);
-    }
-PHP;
-    }
-
-    protected function generateRestMethods(): string
-    {
-        return <<<'PHP'
-    public function index(?Request $request = null): Response
-    {
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success',
-            'data' => []
-        ]);
-    }
-
-    public function store(?Request $request = null): Response
-    {
-        $data = $request->post();
-        return Response::json([
-            'code' => 201,
-            'msg' => 'Resource created',
-            'data' => $data
-        ], 201);
-    }
-
-    public function show(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success',
-            'data' => ['id' => $id]
-        ]);
-    }
-
-    public function update(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        $data = $request->post();
-        return $this->json([
-            'code' => 200,
-            'msg' => 'Resource updated',
-            'data' => ['id' => $id, 'data' => $data]
-        ]);
-    }
-
-    public function destroy(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'Resource deleted'
-        ]);
-    }
-PHP;
-    }
-
-    protected function generateApiMethods(): string
-    {
-        return <<<'PHP'
-    public function index(?Request $request = null): Response
-    {
-        $page = $request->param('page', 1);
-        $limit = $request->param('limit', 15);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success',
-            'data' => [
-                'list' => [],
-                'total' => 0,
-                'page' => $page,
-                'limit' => $limit
-            ]
-        ]);
-    }
-
-    public function show(?Request $request = null): Response
-    {
-        $id = $request->param('id', 0);
-        return $this->json([
-            'code' => 200,
-            'msg' => 'success',
-            'data' => ['id' => $id]
-        ]);
-    }
-
-    public function store(?Request $request = null): Response
-    {
-        $data = $request->post();
-        $validate = new \SwiftPHP\Core\Validate\Validate();
-        if (!$validate->check($data)) {
-            return Response::json([
-                'code' => 422,
-                'msg' => 'Validation failed',
-                'errors' => $validate->getErrors()
-            ], 422);
-        }
+        \$data = \$request->post();
         return Response::json([
             'code' => 201,
             'msg' => 'Created successfully',
-            'data' => $data
+            'data' => \$data
         ], 201);
     }
 
-    public function update(?Request $request = null): Response
+    public function update(?Request \$request = null): Response
     {
-        $id = $request->param('id', 0);
-        $data = $request->post();
-        return $this->json([
+        \$id = \$request->param('id', 0);
+        \$data = \$request->put();
+        return \$this->json([
             'code' => 200,
             'msg' => 'Updated successfully',
-            'data' => ['id' => $id]
+            'data' => ['id' => \$id] + \$data
         ]);
     }
 
-    public function destroy(?Request $request = null): Response
+    public function destroy(?Request \$request = null): Response
     {
-        $id = $request->param('id', 0);
-        return $this->json([
+        \$id = \$request->param('id', 0);
+        return \$this->json([
             'code' => 200,
-            'msg' => 'Deleted successfully'
+            'msg' => 'Deleted successfully',
+            'data' => ['id' => \$id]
+        ]);
+    }
+PHP;
+        }
+
+        if ($isApi) {
+            return <<<PHP
+
+    public function index(?Request \$request = null): Response
+    {
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'success',
+            'data' => []
+        ]);
+    }
+
+    public function create(?Request \$request = null): Response
+    {
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'success',
+            'data' => null
+        ]);
+    }
+
+    public function save(?Request \$request = null): Response
+    {
+        \$data = \$request->post();
+        return Response::json([
+            'code' => 201,
+            'msg' => 'Created successfully',
+            'data' => \$data
+        ], 201);
+    }
+
+    public function read(?Request \$request = null): Response
+    {
+        \$id = \$request->param('id', 0);
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'success',
+            'data' => ['id' => \$id]
+        ]);
+    }
+
+    public function update(?Request \$request = null): Response
+    {
+        \$id = \$request->param('id', 0);
+        \$data = \$request->put();
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'Updated successfully',
+            'data' => ['id' => \$id] + \$data
+        ]);
+    }
+
+    public function delete(?Request \$request = null): Response
+    {
+        \$id = \$request->param('id', 0);
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'Deleted successfully',
+            'data' => ['id' => \$id]
+        ]);
+    }
+PHP;
+        }
+
+        return <<<PHP
+
+    public function index(?Request \$request = null): Response
+    {
+        return \$this->json([
+            'code' => 200,
+            'msg' => 'Welcome to {$className}Controller',
+            'data' => null
         ]);
     }
 PHP;

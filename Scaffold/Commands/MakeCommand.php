@@ -2,6 +2,7 @@
 
 namespace SwiftPHP\Scaffold\Commands;
 
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -16,9 +17,8 @@ class MakeCommand extends BaseCommand
     {
         $this
             ->setName($this->commandName)
-            ->setDescription('Create a new console command class')
-            ->addArgument('name', InputArgument::REQUIRED, 'The command name (e.g., Demo)')
-            ->addOption('command', 'c', InputOption::VALUE_REQUIRED, 'The console command signature');
+            ->setDescription('Create a new command class')
+            ->addArgument('name', InputArgument::REQUIRED, 'The command name (e.g., SendEmail)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -30,78 +30,49 @@ class MakeCommand extends BaseCommand
             return Command::FAILURE;
         }
 
-        $commandSignature = $input->getOption('command');
-
-        if ($commandSignature !== null && !preg_match('/^[a-z][a-z0-9:_]*$/', $commandSignature)) {
-            $io->error('Command signature must start with a letter and contain only lowercase letters, numbers, colons, and underscores');
-            return Command::FAILURE;
-        }
-
         $className = $this->toPascalCase($name);
         $directory = $this->buildPath($this->basePath, 'app', 'command');
         $this->ensureDirectory($directory);
 
-        $filePath = $this->buildPath($directory, $className . 'Command.php');
+        $filePath = $this->buildPath($directory, $className . '.php');
 
         if (file_exists($filePath)) {
-            $io->error("Command {$className}Command already exists!");
+            $io->error("Command {$className} already exists!");
             return Command::FAILURE;
         }
 
-        $signature = $commandSignature ?: 'app:' . $this->toCamelCase($name);
+        $content = $this->generateContent($className);
 
-        $content = <<<PHP
-<?php
-
-namespace App\\Command;
-
-use Symfony\\Component\\Console\\Attribute\\AsCommand;
-use Symfony\\Component\\Console\\Command\\Command;
-use Symfony\\Component\\Console\\Input\\InputInterface;
-use Symfony\\Component\\Console\\Input\\InputOption;
-use Symfony\\Component\\Console\\Input\\InputArgument;
-use Symfony\\Component\\Console\\Output\\OutputInterface;
-use Symfony\\Component\\Console\\Style\\SymfonyStyle;
-
-#[AsCommand(
-    name: '{$signature}',
-    description: 'Add a description for your command',
-)]
-class {$className}Command extends Command
-{
-    protected function configure(): void
-    {
-        \$this
-            ->addOption('option', 'o', InputOption::VALUE_NONE, 'Option description')
-            ->addArgument('argument', InputArgument::OPTIONAL, 'Argument description');
-    }
-
-    protected function execute(InputInterface \$input, OutputInterface \$output): int
-    {
-        \$io = new SymfonyStyle(\$input, \$output);
-
-        \$io->success('Command executed successfully!');
+        file_put_contents($filePath, $content);
+        $io->success("Command {$className} created successfully!");
 
         return Command::SUCCESS;
+    }
+
+    protected function generateContent(string $className): string
+    {
+        $lowerName = strtolower(preg_replace('/([a-z])([A-Z])/', '$1:$2', $className));
+
+        return <<<PHP
+<?php
+
+namespace App\Command;
+
+use SwiftPHP\Command\Command;
+use SwiftPHP\Request\Request;
+use SwiftPHP\Response\Response;
+
+class {$className} extends Command
+{
+    protected \$signature = '{$lowerName}';
+    protected \$description = '{$className} command';
+
+    public function handle(): int
+    {
+        \$this->info('{$className} command executed successfully!');
+        return 0;
     }
 }
 PHP;
-
-        if (file_put_contents($filePath, $content) === false) {
-            $io->error("Failed to create command file");
-            return Command::FAILURE;
-        }
-
-        $io->success("Command {$className}Command created successfully!");
-        $io->text("Path: {$filePath}");
-        $io->table(
-            ['Info', 'Value'],
-            [
-                ['Signature', $signature],
-                ['Run Command', 'php think ' . $signature]
-            ]
-        );
-
-        return Command::SUCCESS;
     }
 }
