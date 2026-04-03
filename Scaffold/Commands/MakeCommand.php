@@ -18,13 +18,15 @@ class MakeCommand extends BaseCommand
         $this
             ->setName($this->commandName)
             ->setDescription('Create a new command class')
-            ->addArgument('name', InputArgument::REQUIRED, 'The command name (e.g., SendEmail)');
+            ->addArgument('name', InputArgument::REQUIRED, 'The command name (e.g., SendEmail)')
+            ->addOption('command', 'c', InputOption::VALUE_REQUIRED, 'The command signature (e.g., app:demo)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
         $name = $input->getArgument('name');
+        $command = $input->getOption('command');
 
         if ($this->validateName($name, $io)) {
             return Command::FAILURE;
@@ -41,7 +43,7 @@ class MakeCommand extends BaseCommand
             return Command::FAILURE;
         }
 
-        $content = $this->generateContent($className);
+        $content = $this->generateContent($className, $command);
 
         file_put_contents($filePath, $content);
         $io->success("Command {$className} created successfully!");
@@ -49,9 +51,9 @@ class MakeCommand extends BaseCommand
         return Command::SUCCESS;
     }
 
-    protected function generateContent(string $className): string
+    protected function generateContent(string $className, ?string $command): string
     {
-        $lowerName = strtolower(preg_replace('/([a-z])([A-Z])/', '$1:$2', $className));
+        $signature = $command ?: strtolower(preg_replace('/([a-z])([A-Z])/', '$1:$2', $className));
 
         return <<<PHP
 <?php
@@ -64,7 +66,7 @@ use SwiftPHP\Response\Response;
 
 class {$className} extends Command
 {
-    protected \$signature = '{$lowerName}';
+    protected \$signature = '{$signature}';
     protected \$description = '{$className} command';
 
     public function handle(): int
