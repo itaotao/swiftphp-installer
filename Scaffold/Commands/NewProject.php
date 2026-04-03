@@ -724,7 +724,7 @@ ENV;
     },
     "autoload": {
         "psr-4": {
-            "App\\": "app/"
+            "App\\\\": "app/"
         },
         "files": [
             "app/common.php",
