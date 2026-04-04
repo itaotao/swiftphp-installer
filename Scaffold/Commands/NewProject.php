@@ -176,8 +176,16 @@ PHP;
 
         $startBat = <<<'BAT'
 @echo off
-php start.php
-pause
+chcp 65001 >nul 2>&1
+title SwiftPHP Server
+:loop
+php start.php start
+echo.
+echo ===================================
+echo  Reloading in 1 second...
+echo ===================================
+timeout /t 1 /nobreak >nul 2>&1
+goto loop
 BAT;
 
         file_put_contents($projectPath . '/start.bat', $startBat);
@@ -376,13 +384,22 @@ PHP;
 <?php
 
 return [
-    'host' => '0.0.0.0',
-    'port' => 8080,
-    'workers' => 4,
-    'reloadable' => true,
-    'reuse_port' => false,
-    'transport' => 'tcp',
-    'context' => [],
+    'server' => [
+        'host' => '0.0.0.0',
+        'port' => 8787,
+        'processes' => 1,
+        'timeout' => 60,
+    ],
+    'app' => [
+        'debug' => true,
+        'env' => 'development',
+    ],
+    'hot_reload' => [
+        'enable' => true,
+        'interval' => 1000,
+        'watch_paths' => [],
+        'watch_extensions' => ['php'],
+    ],
 ];
 PHP;
 
