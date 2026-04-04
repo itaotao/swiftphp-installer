@@ -663,14 +663,11 @@ PHP;
         $routeFile = <<<'PHP'
 <?php
 
-use SwiftPHP\Routing\Router;
-
-$router = new Router();
-
-$router->get('/', 'IndexController@index');
-$router->get('/hello', 'IndexController@hello');
-
-return $router;
+return [
+    'GET /' => 'App\\Controller\\IndexController@index',
+    'GET /index' => 'App\\Controller\\IndexController@index',
+    'GET /hello' => 'App\\Controller\\IndexController@hello',
+];
 PHP;
 
         file_put_contents($projectPath . '/route/route.php', $routeFile);
