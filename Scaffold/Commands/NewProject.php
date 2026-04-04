@@ -174,8 +174,16 @@ PHP;
 
         $startBat = <<<'BAT'
 @echo off
+chcp 65001 >nul 2>&1
+title SwiftPHP Server
+:loop
 php start.php
-pause
+echo.
+echo ===================================
+echo  Reloading in 1 second...
+echo ===================================
+timeout /t 1 /nobreak >nul 2>&1
+goto loop
 BAT;
 
         file_put_contents($projectPath . '/start.bat', $startBat);
