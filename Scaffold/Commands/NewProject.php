@@ -395,13 +395,19 @@ PHP;
 <?php
 
 return [
-    'host' => '0.0.0.0',
-    'port' => 8080,
-    'workers' => 4,
-    'reloadable' => true,
-    'reuse_port' => false,
-    'transport' => 'tcp',
-    'context' => [],
+    'app' => [
+        'name' => 'SwiftPHP',
+        'debug' => true,
+    ],
+    'server' => [
+        'host' => '0.0.0.0',
+        'port' => 8787,
+        'workers' => 4,
+        'reloadable' => true,
+        'reuse_port' => false,
+        'transport' => 'tcp',
+        'context' => [],
+    ],
 ];
 PHP;
 
