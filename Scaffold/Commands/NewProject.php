@@ -476,6 +476,159 @@ function app(?string $class = null)
 
     return $container[$class];
 }
+
+function I(string $name = '', $default = null, $filter = null)
+{
+    static $input = null;
+
+    if ($input === null) {
+        $input = [
+            'get' => $_GET,
+            'post' => $_POST,
+            'request' => $_REQUEST,
+            'cookie' => $_COOKIE,
+            'server' => $_SERVER,
+            'input' => [],
+        ];
+
+        $rawInput = file_get_contents('php://input');
+        if (!empty($rawInput)) {
+            $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+            if (strpos($contentType, 'application/json') !== false) {
+                $input['input'] = json_decode($rawInput, true) ?? [];
+            } elseif (strpos($contentType, 'multipart/form-data') === false) {
+                parse_str($rawInput, $input['input']);
+            }
+        }
+    }
+
+    if ($name === '') {
+        return $input['request'];
+    }
+
+    $keys = explode('.', $name);
+    $source = array_shift($keys);
+
+    if (isset($input[$source])) {
+        $data = $input[$source];
+    } else {
+        $data = $input['request'];
+        array_unshift($keys, $source);
+    }
+
+    foreach ($keys as $key) {
+        if (!is_array($data) || !isset($data[$key])) {
+            return $default;
+        }
+        $data = $data[$key];
+    }
+
+    if ($filter !== null) {
+        if (is_string($filter)) {
+            $filters = explode(',', $filter);
+            foreach ($filters as $f) {
+                $f = trim($f);
+                if (function_exists($f)) {
+                    $data = $f($data);
+                }
+            }
+        } elseif (is_callable($filter)) {
+            $data = call_user_func($filter, $data);
+        }
+    }
+
+    return $data;
+}
+
+function S(string $key, $value = null, ?int $expire = null)
+{
+    static $initialized = false;
+
+    if (!$initialized) {
+        $config = config('cache', ['default' => 'file', 'stores' => []]);
+        $storeConfig = $config['stores'][$config['default']] ?? ['type' => 'file', 'path' => 'runtime/cache/', 'expire' => 0];
+        \SwiftPHP\Cache\Cache::init([
+            'driver' => $storeConfig['type'] ?? 'file',
+            'path' => $storeConfig['path'] ?? 'runtime/cache/',
+            'expire' => $storeConfig['expire'] ?? 0,
+        ]);
+        $initialized = true;
+    }
+
+    if (func_num_args() === 1) {
+        return \SwiftPHP\Cache\Cache::get($key);
+    }
+
+    if ($value === null) {
+        return \SwiftPHP\Cache\Cache::delete($key);
+    }
+
+    return \SwiftPHP\Cache\Cache::set($key, $value, $expire ?? 0);
+}
+
+/**
+ * 快速文件缓存 F()
+ * 用法和老版 ThinkPHP 完全一致
+ * @param string $name 缓存名
+ * @param mixed $value 缓存值 null=删除, 不传=获取
+ * @return mixed
+ */
+function F($name, $value = '')
+{
+    $dir = dirname(__DIR__) . '/runtime/data/';
+
+    // 目录不存在自动创建
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $file = $dir . $name . '.php';
+
+    // 获取
+    if ($value === '') {
+        if (!is_file($file)) {
+            return null;
+        }
+        return include $file;
+    }
+
+    // 删除
+    if (is_null($value)) {
+        return is_file($file) ? unlink($file) : true;
+    }
+
+    // 写入
+    $content = "<?php\nreturn " . var_export($value, true) . ";\n";
+    return file_put_contents($file, $content);
+}
+
+function A($controller)
+{
+    $class = '\\app\\controller\\' . ucfirst($controller);
+    return class_exists($class) ? new $class : null;
+}
+
+function U(string $url, array $params = []): string
+{
+    $url = trim($url, '/');
+    $query = http_build_query($params);
+    return $params ? '/' . $url . '?' . $query : '/' . $url;
+}
+
+function G($start, $end = '')
+{
+    static $_time = [];
+    if ($end === '') {
+        $_time[$start] = microtime(true);
+    } else {
+        return number_format(($_time[$end] ?? microtime(true)) - $_time[$start], 6);
+    }
+}
+
+function E($msg)
+{
+    throw new \Exception($msg);
+}
 PHP;
 
         file_put_contents($projectPath . '/app/common.php', $commonFile);
