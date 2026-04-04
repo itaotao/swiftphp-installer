@@ -626,6 +626,11 @@ function E($msg)
 {
     throw new \Exception($msg);
 }
+
+function M($table = '')
+{
+    return (new \SwiftPHP\Model\Model())->table($table);
+}
 PHP;
 
         file_put_contents($projectPath . '/app/common.php', $commonFile);
