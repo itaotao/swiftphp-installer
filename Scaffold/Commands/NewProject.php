@@ -158,6 +158,20 @@ PHP;
 
         file_put_contents($projectPath . '/start.php', $startPhp);
 
+        $swiftphpCli = <<<'PHP'
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/vendor/autoload.php';
+
+use SwiftPHP\Scaffold\Scaffold;
+
+$app = Scaffold::getInstance();
+$app->run($_SERVER['argv']);
+PHP;
+
+        file_put_contents($projectPath . '/swiftphp', $swiftphpCli);
+
         $startBat = <<<'BAT'
 @echo off
 php start.php
