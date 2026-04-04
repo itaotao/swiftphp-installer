@@ -15,6 +15,7 @@ class NewProject extends BaseCommand
 
     protected function configure(): void
     {
+        parent::configure();
         $this
             ->setName($this->commandName)
             ->setDescription('Create a new SwiftPHP project')
@@ -106,18 +107,17 @@ class NewProject extends BaseCommand
 
 define('SWIFTPHP_START_TIME', microtime(true));
 define('SWIFTPHP_START_MEM', memory_get_usage());
-define('SWIFTPHP_ROOT', dirname(__DIR__));
 
-require SWIFTPHP_ROOT . '/vendor/autoload.php';
+require dirname(__DIR__) . '/vendor/autoload.php';
 
-require SWIFTPHP_ROOT . '/app/common.php';
+require dirname(__DIR__) . '/app/common.php';
 
-require SWIFTPHP_ROOT . '/core/Container/Container.php';
-require SWIFTPHP_ROOT . '/core/Request/Request.php';
-require SWIFTPHP_ROOT . '/core/Response/Response.php';
-require SWIFTPHP_ROOT . '/core/Controller/Controller.php';
-require SWIFTPHP_ROOT . '/core/Routing/Router.php';
-require SWIFTPHP_ROOT . '/core/I18n/I18n.php';
+require dirname(__DIR__) . '/core/Container/Container.php';
+require dirname(__DIR__) . '/core/Request/Request.php';
+require dirname(__DIR__) . '/core/Response/Response.php';
+require dirname(__DIR__) . '/core/Controller/Controller.php';
+require dirname(__DIR__) . '/core/Routing/Router.php';
+require dirname(__DIR__) . '/core/I18n/I18n.php';
 
 $request = new \SwiftPHP\Request\Request();
 $request->setMethod($_SERVER['REQUEST_METHOD'] ?? 'GET')
@@ -147,45 +147,21 @@ PHP;
 
         $startPhp = <<<'PHP'
 <?php
-define('SWIFTPHP_ROOT', __DIR__);
-if (!is_file(SWIFTPHP_ROOT . '/vendor/autoload.php')) {
-    echo "========================================\n";
-    echo "  SwiftPHP Framework\n";
-    echo "========================================\n";
-    echo "Error: Dependencies not installed.\n\n";
-    echo "Please run the following commands:\n\n";
-    echo "  composer install\n\n";
-    echo "Then start the server again.\n";
-    exit(1);
-}
 
-require_once SWIFTPHP_ROOT . '/vendor/autoload.php';
-
-if (!class_exists('SwiftPHP\Server\SwiftServer')) {
-    echo "Error: SwiftPHP Core not found. Please run 'composer install' first.\n";
-    exit(1);
-}
+require_once __DIR__ . '/vendor/autoload.php';
 
 use SwiftPHP\Server\SwiftServer;
 
 $server = new SwiftServer();
-$server->start();
+$server->run();
 PHP;
 
         file_put_contents($projectPath . '/start.php', $startPhp);
 
         $startBat = <<<'BAT'
 @echo off
-chcp 65001 >nul 2>&1
-title SwiftPHP Server
-:loop
-php start.php start
-echo.
-echo ===================================
-echo  Reloading in 1 second...
-echo ===================================
-timeout /t 1 /nobreak >nul 2>&1
-goto loop
+php start.php
+pause
 BAT;
 
         file_put_contents($projectPath . '/start.bat', $startBat);
@@ -202,23 +178,6 @@ BAT;
 HTACCESS;
 
         file_put_contents($projectPath . '/public/.htaccess', $htaccess);
-
-        $swiftphpFile = <<<'PHP'
-#!/usr/bin/env php
-<?php
-
-require __DIR__ . '/vendor/autoload.php';
-
-use SwiftPHP\Scaffold\Scaffold;
-
-$loader = require __DIR__ . '/vendor/autoload.php';
-$loader->addPsr4('SwiftPHP\\Scaffold\\', __DIR__ . '/Scaffold/');
-
-Scaffold::getInstance()->run($_SERVER['argv']);
-PHP;
-
-        file_put_contents($projectPath . '/swiftphp', $swiftphpFile);
-        chmod($projectPath . '/swiftphp', 0755);
     }
 
     protected function createConfigFiles(string $projectPath, string $projectName): void
@@ -259,32 +218,62 @@ PHP;
 
         file_put_contents($projectPath . '/config/database.php', $databaseConfig);
 
-        $routeConfig = <<<'PHP'
+        $routeFile = <<<'PHP'
 <?php
 
 return [
-    'default' => 'index',
-    'default_action' => 'index',
-    'url_route_on' => true,
-    'route_complete_match' => false,
-    'url_domain_deploy' => false,
-    'url_domain_root' => '',
-    'url_convert' => true,
-    'url_controller_layer' => 'controller',
-    'action_suffix' => '',
-    'url_param_type' => 0,
+    'GET /' => 'App\Controller\IndexController@index',
+    'GET /hello' => 'App\Controller\IndexController@hello',
+
+    'GET /api/v1/users' => 'App\Controller\UserController@index',
+    'GET /api/v1/users/{id}' => [
+        'uses' => 'App\Controller\UserController@show',
+        'where' => ['id' => '[0-9]+'],
+    ],
+    'GET /api/v1/posts' => [
+        'uses' => 'App\Controller\PostController@index',
+    ],
+    'GET /api/v1/posts/{id}' => [
+        'uses' => 'App\Controller\PostController@show',
+        'where' => ['id' => '[0-9]+'],
+    ],
+
+    'GET /admin/dashboard' => [
+        'uses' => 'App\Controller\AdminController@dashboard',
+        'middleware' => ['admin'],
+        'as' => 'admin.dashboard',
+    ],
+    'GET /admin/users' => [
+        'uses' => 'App\Controller\AdminController@users',
+        'middleware' => ['admin'],
+        'as' => 'admin.users',
+    ],
 ];
 PHP;
 
-        file_put_contents($projectPath . '/config/route.php', $routeConfig);
+        file_put_contents($projectPath . '/route/route.php', $routeFile);
 
         $middlewareConfig = <<<'PHP'
 <?php
 
 return [
-    'global' => [],
+    'global' => [\App\Middleware\Cors::class],
+
+    'groups' => [
+        'admin' => [\App\Middleware\Auth::class],
+        'api' => [\App\Middleware\ApiAuth::class],
+    ],
+
+    'prefix' => [
+        '/admin' => 'admin',
+        '/api' => 'api',
+    ],
+
     'only' => [],
+
     'except' => [],
+
+    'cache' => false,
 ];
 PHP;
 
@@ -384,22 +373,13 @@ PHP;
 <?php
 
 return [
-    'server' => [
-        'host' => '0.0.0.0',
-        'port' => 8787,
-        'processes' => 1,
-        'timeout' => 60,
-    ],
-    'app' => [
-        'debug' => true,
-        'env' => 'development',
-    ],
-    'hot_reload' => [
-        'enable' => true,
-        'interval' => 1000,
-        'watch_paths' => [],
-        'watch_extensions' => ['php'],
-    ],
+    'host' => '0.0.0.0',
+    'port' => 8080,
+    'workers' => 4,
+    'reloadable' => true,
+    'reuse_port' => false,
+    'transport' => 'tcp',
+    'context' => [],
 ];
 PHP;
 
@@ -411,7 +391,7 @@ PHP;
         $commonFile = <<<'PHP'
 <?php
 
-function config(?string $name = null, $default = null)
+function config(string $name = null, $default = null)
 {
     static $config = [];
     static $loaded = [];
@@ -479,7 +459,7 @@ function env(string $key, $default = null)
     return $env[$key] ?? $default;
 }
 
-function app(?string $class = null)
+function app(string $class = null)
 {
     static $container = [];
 
@@ -493,184 +473,9 @@ function app(?string $class = null)
 
     return $container[$class];
 }
-
-function I(string $name = '', $default = null, $filter = null)
-{
-    static $input = null;
-
-    if ($input === null) {
-        $input = [
-            'get' => $_GET,
-            'post' => $_POST,
-            'request' => $_REQUEST,
-            'cookie' => $_COOKIE,
-            'server' => $_SERVER,
-            'input' => [],
-        ];
-
-        $rawInput = file_get_contents('php://input');
-        if (!empty($rawInput)) {
-            $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
-            if (strpos($contentType, 'application/json') !== false) {
-                $input['input'] = json_decode($rawInput, true) ?? [];
-            } elseif (strpos($contentType, 'multipart/form-data') === false) {
-                parse_str($rawInput, $input['input']);
-            }
-        }
-    }
-
-    if ($name === '') {
-        return $input['request'];
-    }
-
-    $keys = explode('.', $name);
-    $source = array_shift($keys);
-
-    if (isset($input[$source])) {
-        $data = $input[$source];
-    } else {
-        $data = $input['request'];
-        array_unshift($keys, $source);
-    }
-
-    foreach ($keys as $key) {
-        if (!is_array($data) || !isset($data[$key])) {
-            return $default;
-        }
-        $data = $data[$key];
-    }
-
-    if ($filter !== null) {
-        if (is_string($filter)) {
-            $filters = explode(',', $filter);
-            foreach ($filters as $f) {
-                $f = trim($f);
-                if (function_exists($f)) {
-                    $data = $f($data);
-                }
-            }
-        } elseif (is_callable($filter)) {
-            $data = call_user_func($filter, $data);
-        }
-    }
-
-    return $data;
-}
-
-function S(string $key, $value = null, ?int $expire = null)
-{
-    static $initialized = false;
-
-    if (!$initialized) {
-        $config = config('cache', ['default' => 'file', 'stores' => []]);
-        $storeConfig = $config['stores'][$config['default']] ?? ['type' => 'file', 'path' => 'runtime/cache/', 'expire' => 0];
-        \SwiftPHP\Cache\Cache::init([
-            'driver' => $storeConfig['type'] ?? 'file',
-            'path' => $storeConfig['path'] ?? 'runtime/cache/',
-            'expire' => $storeConfig['expire'] ?? 0,
-        ]);
-        $initialized = true;
-    }
-
-    if (func_num_args() === 1) {
-        return \SwiftPHP\Cache\Cache::get($key);
-    }
-
-    if ($value === null) {
-        return \SwiftPHP\Cache\Cache::delete($key);
-    }
-
-    return \SwiftPHP\Cache\Cache::set($key, $value, $expire ?? 0);
-}
-
-/**
- * 快速文件缓存 F()
- * 用法和老版 ThinkPHP 完全一致
- * @param string $name 缓存名
- * @param mixed $value 缓存值 null=删除, 不传=获取
- * @return mixed
- */
-function F($name, $value = '')
-{
-    $dir = dirname(__DIR__) . '/runtime/data/';
-
-    // 目录不存在自动创建
-    if (!is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $file = $dir . $name . '.php';
-
-    // 获取
-    if ($value === '') {
-        if (!is_file($file)) {
-            return null;
-        }
-        return include $file;
-    }
-
-    // 删除
-    if (is_null($value)) {
-        return is_file($file) ? unlink($file) : true;
-    }
-
-    // 写入
-    $content = "<?php\nreturn " . var_export($value, true) . ";\n";
-    return file_put_contents($file, $content);
-}
-
-function A($controller)
-{
-    $class = '\\app\\controller\\' . ucfirst($controller);
-    return class_exists($class) ? new $class : null;
-}
-
-function U(string $url, array $params = []): string
-{
-    $url = trim($url, '/');
-    $query = http_build_query($params);
-    return $params ? '/' . $url . '?' . $query : '/' . $url;
-}
-
-function G($start, $end = '')
-{
-    static $_time = [];
-    if ($end === '') {
-        $_time[$start] = microtime(true);
-    } else {
-        return number_format(($_time[$end] ?? microtime(true)) - $_time[$start], 6);
-    }
-}
-
-function E($msg)
-{
-    throw new \Exception($msg);
-}
 PHP;
 
         file_put_contents($projectPath . '/app/common.php', $commonFile);
-
-        $bootstrapFile = <<<'PHP'
-<?php
-
-if (!defined('SWIFTPHP_ROOT')) {
-    define('SWIFTPHP_ROOT', dirname(__DIR__));
-}
-PHP;
-
-        file_put_contents($projectPath . '/bootstrap.php', $bootstrapFile);
-
-        $routeFile = <<<'PHP'
-<?php
-
-return [
-    'GET /' => 'App\\Controller\\IndexController@index',
-    'GET /index' => 'App\\Controller\\IndexController@index',
-    'GET /hello' => 'App\\Controller\\IndexController@hello',
-];
-PHP;
-
-        file_put_contents($projectPath . '/route/route.php', $routeFile);
 
         $indexController = <<<'PHP'
 <?php
@@ -911,26 +716,15 @@ ENV;
             "App\\\\": "app/"
         },
         "files": [
-            "app/common.php",
-            "bootstrap.php"
+            "app/common.php"
         ]
     },
-    "repositories": [
-        {
-            "type": "path",
-            "url": "../swiftphp-core",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "scripts": {
         "start": "php start.php",
         "server": "php start.php"
-    },
-    "bin": ["swiftphp"]
+    }
 }
 JSON;
 
