@@ -158,6 +158,277 @@ PHP;
 
         file_put_contents($projectPath . '/start.php', $startPhp);
 
+        $startSwoolePhp = <<<'PHP'
+<?php
+/**
+ * SwiftPHP Swoole 启动脚本
+ * 
+ * 使用方法：
+ * php start_swoole.php start    # 启动
+ * php start_swoole.php stop     # 停止
+ * php start_swoole.php restart  # 重启
+ * php start_swoole.php reload   # 平滑重载
+ * php start_swoole.php status   # 查看状态
+ * php start_swoole.php stats    # 查看统计
+ */
+
+// 启用 Swoole 6.x PDO Hook 模式
+if (extension_loaded('swoole')) {
+    swoole_async_set(['hook_flags' => SWOOLE_HOOK_ALL]);
+}
+
+// 确保自动加载文件存在
+$autoloadPath = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoloadPath)) {
+    echo "Error: autoload.php not found at {$autoloadPath}
+";
+    exit(1);
+}
+
+require_once $autoloadPath;
+
+// 直接包含 SwooleServer.php 文件，绕过自动加载问题
+$swooleServerPath = __DIR__ . '/vendor/itaotao/swiftphp-core/Swoole/SwooleServer.php';
+if (!file_exists($swooleServerPath)) {
+    echo "Error: SwooleServer.php not found at {$swooleServerPath}
+";
+    exit(1);
+}
+require_once $swooleServerPath;
+
+use SwiftPHP\Swoole\SwooleServer;
+
+$command = $argv[1] ?? 'start';
+$daemon = false;
+
+// 检查是否有 -d 参数
+foreach ($argv as $arg) {
+    if ($arg === '-d' || $arg === '--daemon') {
+        $daemon = true;
+        break;
+    }
+}
+
+// 直接使用 __DIR__ 获取配置文件路径
+$configFile = __DIR__ . '/config/server.php';
+$config = [];
+if (file_exists($configFile)) {
+    $config = include $configFile;
+}
+
+// 从配置文件获取默认值，命令行参数优先级更高
+$host = $argv[2] ?? ($config['server']['host'] ?? '0.0.0.0');
+$port = $argv[3] ?? ($config['server']['port'] ?? 8787);
+
+$pidFile = __DIR__ . '/runtime/swoole.pid';
+
+function getPid(): ?int
+{
+    global $pidFile;
+    if (file_exists($pidFile)) {
+        $pid = (int)file_get_contents($pidFile);
+        return $pid > 0 ? $pid : null;
+    }
+    return null;
+}
+
+function isRunning(int $pid): bool
+{
+    if (DIRECTORY_SEPARATOR === '\\') {
+        // Windows
+        $output = [];
+        exec("tasklist /FI \"PID eq {$pid}\" /NH", $output);
+        return strpos(implode('', $output), (string)$pid) !== false;
+    } else {
+        // Unix/Linux/Mac
+        return posix_kill($pid, 0);
+    }
+}
+
+switch ($command) {
+    case 'start':
+        $pid = getPid();
+        if ($pid && isRunning($pid)) {
+            echo "SwiftPHP Swoole is already running (PID: {$pid})\n";
+            exit(1);
+        }
+        
+        echo "Starting SwiftPHP Swoole Server...\n";
+        echo "Listen: {$host}:{$port}\n";
+        echo "PID File: {$pidFile}\n";
+        if ($daemon) {
+            echo "Mode: Daemon\n\n";
+        } else {
+            echo "Mode: Foreground\n\n";
+        }
+        
+        // 创建运行目录
+        $runtimeDir = dirname($pidFile);
+        if (!is_dir($runtimeDir)) {
+            mkdir($runtimeDir, 0755, true);
+        }
+        
+        // 后台运行模式
+        if ($daemon && DIRECTORY_SEPARATOR !== '\\') {
+            // Unix/Linux/Mac - 使用 pcntl_fork 后台运行
+            if (function_exists('pcntl_fork')) {
+                $pid = pcntl_fork();
+                if ($pid === -1) {
+                    die('Could not fork process');
+                } elseif ($pid > 0) {
+                    // 父进程 - 写入 PID 文件
+                    file_put_contents($pidFile, $pid);
+                    echo "Started (PID: {$pid})\n";
+                    exit(0);
+                }
+                
+                // 子进程 - 重定向输出到日志文件
+                $logFile = dirname($pidFile) . '/swoole.log';
+                
+                // 关闭所有标准文件描述符
+                fclose(STDIN);
+                fclose(STDOUT);
+                fclose(STDERR);
+                
+                // 重新打开标准文件描述符指向日志文件
+                $stdin = fopen('/dev/null', 'r');
+                $stdout = fopen($logFile, 'a');
+                $stderr = fopen($logFile, 'a');
+                
+                if (!$stdin || !$stdout || !$stderr) {
+                    die('Could not redirect output');
+                }
+                
+                // 脱离终端控制
+                posix_setsid();
+                
+            } else {
+                // 没有 pcntl 扩展，直接运行
+                file_put_contents($pidFile, getmypid());
+                echo "Started (PID: " . getmypid() . ")\n";
+            }
+        } else {
+            // 前台运行模式
+            file_put_contents($pidFile, getmypid());
+            echo "Started (PID: " . getmypid() . ")\n";
+        }
+        
+        $server = new SwooleServer($host, $port);
+        $server->start();
+        break;
+        
+    case 'stop':
+        $pid = getPid();
+        if (!$pid) {
+            echo "SwiftPHP Swoole is not running\n";
+            exit(1);
+        }
+        
+        echo "Stopping SwiftPHP Swoole (PID: {$pid})...\n";
+        
+        if (DIRECTORY_SEPARATOR === '\\') {
+            exec("taskkill /F /PID {$pid}");
+        } else {
+            posix_kill($pid, SIGTERM);
+        }
+        
+        // 等待进程退出
+        $timeout = 10;
+        while ($timeout > 0 && isRunning($pid)) {
+            usleep(100000);
+            $timeout--;
+        }
+        
+        if (file_exists($pidFile)) {
+            unlink($pidFile);
+        }
+        
+        echo "Stopped.\n";
+        break;
+        
+    case 'restart':
+        echo "Restarting...\n";
+        passthru("php {$argv[0]} stop");
+        sleep(1);
+        passthru("php {$argv[0]} start");
+        break;
+        
+    case 'reload':
+        $pid = getPid();
+        if (!$pid) {
+            echo "SwiftPHP Swoole is not running\n";
+            exit(1);
+        }
+        
+        echo "Reloading workers (PID: {$pid})...\n";
+        
+        if (DIRECTORY_SEPARATOR === '\\') {
+            echo "Windows does not support graceful reload, please restart.\n";
+        } else {
+            posix_kill($pid, SIGUSR1);
+            echo "Workers reloaded.\n";
+        }
+        break;
+        
+    case 'status':
+        $pid = getPid();
+        if (!$pid || !isRunning($pid)) {
+            echo "SwiftPHP Swoole is not running\n";
+            exit(1);
+        }
+        
+        echo "SwiftPHP Swoole is running\n";
+        echo "PID: {$pid}\n";
+        break;
+        
+    case 'stats':
+        $pid = getPid();
+        if (!$pid || !isRunning($pid)) {
+            echo "SwiftPHP Swoole is not running\n";
+            exit(1);
+        }
+        
+        echo "Fetching stats...\n";
+        
+        // 通过信号获取 stats
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            $output = [];
+            exec("kill -USR1 {$pid} 2>&1");
+        }
+        
+        // 读取日志文件
+        $logFile = __DIR__ . '/runtime/swoole.log';
+        if (file_exists($logFile)) {
+            echo "\n=== Recent Stats ===\n";
+            $lines = file($logFile);
+            $recent = array_slice($lines, -20);
+            foreach ($recent as $line) {
+                echo $line;
+            }
+        }
+        break;
+        
+    default:
+        echo "Usage: php start_swoole.php [command] [host] [port] [-d|--daemon]\n";
+        echo "\nCommands:\n";
+        echo "  start    Start server (default: 0.0.0.0:8787)\n";
+        echo "  stop     Stop server\n";
+        echo "  restart  Restart server\n";
+        echo "  reload   Graceful reload workers\n";
+        echo "  status   Check server status\n";
+        echo "  stats    Show server statistics\n";
+        echo "\nOptions:\n";
+        echo "  -d, --daemon  Run in background (daemon mode)\n";
+        echo "\nExamples:\n";
+        echo "  php start_swoole.php start\n";
+        echo "  php start_swoole.php start 0.0.0.0 8787\n";
+        echo "  php start_swoole.php start -d\n";
+        echo "  php start_swoole.php start 0.0.0.0 8787 -d\n";
+}
+PHP;
+
+        file_put_contents($projectPath . '/start_swoole.php', $startSwoolePhp);
+
         $swiftphpCli = <<<'PHP'
 #!/usr/bin/env php
 <?php
