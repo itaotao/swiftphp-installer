@@ -20,7 +20,8 @@ class NewProject extends BaseCommand
             ->setName($this->commandName)
             ->setDescription('Create a new SwiftPHP project')
             ->addArgument('name', InputArgument::REQUIRED, 'The project name (e.g., myapp)')
-            ->addOption('dir', 'd', InputOption::VALUE_REQUIRED, 'Target directory for the project');
+            ->addOption('dir', 'd', InputOption::VALUE_REQUIRED, 'Target directory for the project')
+            ->addOption('multi', 'm', InputOption::VALUE_NONE, 'Create multi-app directory structure');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -28,6 +29,7 @@ class NewProject extends BaseCommand
         $io = new SymfonyStyle($input, $output);
         $name = $input->getArgument('name');
         $targetDir = $input->getOption('dir');
+        $multiApp = $input->getOption('multi');
 
         if (!preg_match('/^[a-z][a-z0-9_]*$/', $name)) {
             $io->error('Project name must start with a letter and contain only lowercase letters, numbers, and underscores');
@@ -45,10 +47,13 @@ class NewProject extends BaseCommand
 
         $io->title("Creating SwiftPHP Project: {$name}");
         $io->text("Target: {$projectPath}");
+        if ($multiApp) {
+            $io->text("Mode: Multi-app");
+        }
 
         try {
-            $this->createDirectoryStructure($projectPath, $name, $io);
-            $this->createEntryFiles($projectPath, $name);
+            $this->createDirectoryStructure($projectPath, $name, $multiApp, $io);
+            $this->createEntryFiles($projectPath, $name, $multiApp);
             $this->createConfigFiles($projectPath, $name);
             $this->createAppFiles($projectPath, $name);
             $this->createEnvFile($projectPath);
@@ -76,20 +81,43 @@ class NewProject extends BaseCommand
     {
         $io->section('Creating directory structure...');
 
-        $dirs = [
-            'app/controller',
-            'app/model',
-            'app/middleware',
-            'app/validate',
-            'app/lang/zh-cn',
-            'app/lang/en',
-            'config',
-            'public',
-            'route',
-            'runtime/log',
-            'runtime/cache',
-            'bin',
-        ];
+        if ($multiApp) {
+            $dirs = [
+                'app/index/controller',
+                'app/index/model',
+                'app/index/middleware',
+                'app/index/validate',
+                'app/index/lang/zh-cn',
+                'app/index/lang/en',
+                'app/admin/controller',
+                'app/admin/model',
+                'app/admin/middleware',
+                'app/admin/validate',
+                'app/admin/lang/zh-cn',
+                'app/admin/lang/en',
+                'config',
+                'public',
+                'route',
+                'runtime/log',
+                'runtime/cache',
+                'bin',
+            ];
+        } else {
+            $dirs = [
+                'app/controller',
+                'app/model',
+                'app/middleware',
+                'app/validate',
+                'app/lang/zh-cn',
+                'app/lang/en',
+                'config',
+                'public',
+                'route',
+                'runtime/log',
+                'runtime/cache',
+                'bin',
+            ];
+        }
 
         foreach ($dirs as $dir) {
             $fullPath = $projectPath . DIRECTORY_SEPARATOR . $dir;
@@ -100,7 +128,7 @@ class NewProject extends BaseCommand
         }
     }
 
-    protected function createEntryFiles(string $projectPath, string $projectName): void
+    protected function createEntryFiles(string $projectPath, string $projectName, bool $multiApp = false): void
     {
         $publicIndex = <<<'PHP'
 <?php
@@ -479,10 +507,26 @@ HTACCESS;
 <?php
 
 return [
-    'app_name' => 'SwiftPHP',
-    'app_version' => '1.0.0',
-    'locale' => env('APP_LOCALE', 'zh-cn'),
-    'debug' => env('APP_DEBUG', true),
+    // 应用配置
+    'app' => [
+        'app_name' => 'SwiftPHP',
+        'app_version' => '1.0.0',
+        'locale' => env('APP_LOCALE', 'zh-cn'),
+        'debug' => env('APP_DEBUG', true),
+        'default_app' => 'index', // 默认应用
+        'multi_app' => true, // 启用多应用
+        'case_sensitive' => false, // 目录区分大小写，默认不区分
+        'apps' => [
+            'index' => [
+                'name' => '首页应用',
+                'namespace' => 'App\\Index'
+            ],
+            'admin' => [
+                'name' => '后台管理',
+                'namespace' => 'App\\Admin'
+            ]
+        ]
+    ]
 ];
 PHP;
 
